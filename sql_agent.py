@@ -1,3 +1,8 @@
+"""
+A small LangGraph agent that turns an English question into a SQL query,
+runs it against a SQLite database, and returns both the raw result and a
+plain-English summary.
+"""
 import os
 import sqlite3
 from dataclasses import dataclass, field
@@ -11,14 +16,22 @@ load_dotenv()
 
 FORBIDDEN_KEYWORDS = ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE")
 
+
 def _get_model():
+    """Pick whichever LLM provider has an API key set. Groq checked first (free tier)."""
+    if os.getenv("GROQ_API_KEY"):
+        from langchain_groq import ChatGroq
+        return ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
     if os.getenv("ANTHROPIC_API_KEY"):
         from langchain_anthropic import ChatAnthropic
         return ChatAnthropic(model="claude-sonnet-4-6", temperature=0)
     if os.getenv("OPENAI_API_KEY"):
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    raise RuntimeError("No LLM API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env")
+    raise RuntimeError(
+        "No LLM API key found. Set GROQ_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY in .env"
+    )
+
 
 class AgentState(TypedDict, total=False):
     question: str
@@ -28,6 +41,7 @@ class AgentState(TypedDict, total=False):
     columns: list
     summary: str
     error: Optional[str]
+
 
 @dataclass
 class AskResult:
@@ -41,6 +55,7 @@ class AskResult:
     @property
     def dataframe(self) -> pd.DataFrame:
         return pd.DataFrame(self.rows, columns=self.columns)
+
 
 class SQLAgent:
     def __init__(self, db_path: str = "sales.db"):
@@ -128,6 +143,7 @@ class SQLAgent:
             summary=final_state.get("summary", ""),
             error=final_state.get("error"),
         )
+
 
 if __name__ == "__main__":
     agent = SQLAgent()
